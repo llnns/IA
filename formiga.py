@@ -19,28 +19,28 @@ class Map:
 
         self.map = np.zeros((mapSizeX, mapSizeY))
         self.DistributeObjects()
-        self.gl_mapPositions = np.zeros((6*mapSizeX, 6*mapSizeY, 2))
-        tempx = np.linspace(-1.0, +1.0, mapSizeX).astype(np.float32)
-        tempy = np.linspace(-1.0, +1.0, mapSizeY).astype(np.float32)
-        self.gl_Xsize = 2.0/mapSizeX
-        self.gl_Ysize = 2.0/mapSizeY
+        self.gl_mapPositions = np.zeros((6*mapSizeX*mapSizeY, 2))
+        tempx = np.linspace(-0.9, +0.9, mapSizeX+1).astype(np.float32)
+        tempy = np.linspace(+0.9, -0.9, mapSizeY+1).astype(np.float32)
+        self.gl_Xsize = 1.8/mapSizeX
+        self.gl_Ysize = 1.8/mapSizeY
         for x in range(mapSizeX):
             for y in range(mapSizeY):
-                self.gl_mapPositions[6*x][6*y][0] = tempx[x]
-                self.gl_mapPositions[6*x][6*y][1] = tempy[y]
-                self.gl_mapPositions[6*x+1][6*y+1][0] = tempx[x]+self.gl_Xsize
-                self.gl_mapPositions[6*x+1][6*y+1][1] = tempy[y]
-                self.gl_mapPositions[6*x+2][6*y+2][0] = tempx[x]
-                self.gl_mapPositions[6*x+2][6*y+2][1] = tempy[y]+self.gl_Ysize
-                self.gl_mapPositions[6*x+3][6*y+3][0] = tempx[x]+self.gl_Xsize
-                self.gl_mapPositions[6*x+3][6*y+3][1] = tempy[y]
-                self.gl_mapPositions[6*x+4][6*y+4][0] = tempx[x]
-                self.gl_mapPositions[6*x+4][6*y+4][1] = tempy[y]+self.gl_Ysize
-                self.gl_mapPositions[6*x+5][6*y+5][0] = tempx[x]+self.gl_Xsize
-                self.gl_mapPositions[6*x+5][6*y+5][1] = tempy[y]+self.gl_Ysize
+                self.gl_mapPositions[6*mapSizeY*y+6*x][0] = tempx[x]
+                self.gl_mapPositions[6*mapSizeY*y+6*x][1] = tempy[y]
+                self.gl_mapPositions[6*mapSizeY*y+6*x+1][0] = tempx[x]+self.gl_Xsize
+                self.gl_mapPositions[6*mapSizeY*y+6*x+1][1] = tempy[y]
+                self.gl_mapPositions[6*mapSizeY*y+6*x+2][0] = tempx[x]
+                self.gl_mapPositions[6*mapSizeY*y+6*x+2][1] = tempy[y]-self.gl_Ysize
+                self.gl_mapPositions[6*mapSizeY*y+6*x+3][0] = tempx[x]+self.gl_Xsize
+                self.gl_mapPositions[6*mapSizeY*y+6*x+3][1] = tempy[y]
+                self.gl_mapPositions[6*mapSizeY*y+6*x+4][0] = tempx[x]
+                self.gl_mapPositions[6*mapSizeY*y+6*x+4][1] = tempy[y]-self.gl_Ysize
+                self.gl_mapPositions[6*mapSizeY*y+6*x+5][0] = tempx[x]+self.gl_Xsize
+                self.gl_mapPositions[6*mapSizeY*y+6*x+5][1] = tempy[y]-self.gl_Ysize
 
 
-        print(self.gl_mapPositions)
+        #print(self.gl_mapPositions)
         #self.gl_mapPositions = np.c_[
         #    np.linspace(-1.0, +1.0, 100).astype(np.float32),
         #    np.linspace(-1.0, +1.0, 100).astype(np.float32)]
@@ -50,6 +50,10 @@ class Map:
         self.map = self.map.reshape(self.mapSizeX*self.mapSizeY)
         for i in range(self.numberObjects):
             self.map[i] = 1
+        np.random.shuffle(self.map)
+        self.map = self.map.reshape((self.mapSizeX, self.mapSizeY))
+    def RandomObjects(self):
+        self.map = self.map.reshape(self.mapSizeX*self.mapSizeY)
         np.random.shuffle(self.map)
         self.map = self.map.reshape((self.mapSizeX, self.mapSizeY))
 
@@ -73,16 +77,26 @@ class Ant:
 
 vertex = """
 attribute vec2 a_position;
+attribute float a_cor;
+varying vec4 f_cor;
 void main (void)
 {
+    if(a_cor==1.0){
+        f_cor=vec4(0.0,0.0,0.0,1.0);
+    }else if(a_cor==0.0){
+        f_cor=vec4(1.0,1.0,1.0,1.0);
+    }else{
+        f_cor=vec4(1.0,0.0,0.0,1.0);
+    }
     gl_Position = vec4(a_position, 0.0, 1.0);
 }
 """
 
 fragment = """
+varying vec4 f_cor;
 void main()
 {
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    gl_FragColor = f_cor;
 }
 """
 
@@ -113,20 +127,29 @@ def main(argv):
     MyAnt = Ant(1)
 
     GlobalMap = Map(mapSizeX,mapSizeY,numberObjects,numberAnts)
-    GlobalMap.PrintMap()
+    #GlobalMap.PrintMap()
 
     c = app.Canvas(keys='interactive')
+    c._timer = app.Timer('auto', connect=c.update, start=True)
+
     program = gloo.Program(vertex, fragment)
     program['a_position'] = GlobalMap.gl_mapPositions.astype(np.float32)
+    program['a_cor'] = np.repeat(GlobalMap.map,6).astype(np.float32)
+    c.program = program
+    c.GlobalMap = GlobalMap
     @c.connect
     def on_resize(event):
         gloo.set_viewport(0, 0, *event.size)
     @c.connect
     def on_draw(event):
+        #print(c.GlobalMap.map)
         gloo.clear((1,1,1,1))
-        program.draw('lines')
+        c.GlobalMap.RandomObjects()
+        c.program['a_cor'] = np.repeat(c.GlobalMap.map,6).astype(np.float32)
+        program.draw('triangles')
     c.show()
     app.run();
+
     print('oi')
 
 if __name__ == "__main__":
