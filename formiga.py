@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 from random import *
 import numpy as np
 import sys, getopt
@@ -19,6 +19,32 @@ class Map:
 
         self.map = np.zeros((mapSizeX, mapSizeY))
         self.DistributeObjects()
+        self.gl_mapPositions = np.zeros((6*mapSizeX, 6*mapSizeY, 2))
+        tempx = np.linspace(-1.0, +1.0, mapSizeX).astype(np.float32)
+        tempy = np.linspace(-1.0, +1.0, mapSizeY).astype(np.float32)
+        self.gl_Xsize = 2.0/mapSizeX
+        self.gl_Ysize = 2.0/mapSizeY
+        for x in range(mapSizeX):
+            for y in range(mapSizeY):
+                self.gl_mapPositions[6*x][6*y][0] = tempx[x]
+                self.gl_mapPositions[6*x][6*y][1] = tempy[y]
+                self.gl_mapPositions[6*x+1][6*y+1][0] = tempx[x]+self.gl_Xsize
+                self.gl_mapPositions[6*x+1][6*y+1][1] = tempy[y]
+                self.gl_mapPositions[6*x+2][6*y+2][0] = tempx[x]
+                self.gl_mapPositions[6*x+2][6*y+2][1] = tempy[y]+self.gl_Ysize
+                self.gl_mapPositions[6*x+3][6*y+3][0] = tempx[x]+self.gl_Xsize
+                self.gl_mapPositions[6*x+3][6*y+3][1] = tempy[y]
+                self.gl_mapPositions[6*x+4][6*y+4][0] = tempx[x]
+                self.gl_mapPositions[6*x+4][6*y+4][1] = tempy[y]+self.gl_Ysize
+                self.gl_mapPositions[6*x+5][6*y+5][0] = tempx[x]+self.gl_Xsize
+                self.gl_mapPositions[6*x+5][6*y+5][1] = tempy[y]+self.gl_Ysize
+
+
+        print(self.gl_mapPositions)
+        #self.gl_mapPositions = np.c_[
+        #    np.linspace(-1.0, +1.0, 100).astype(np.float32),
+        #    np.linspace(-1.0, +1.0, 100).astype(np.float32)]
+        #print(self.gl_mapPositions)
 
     def DistributeObjects(self):
         self.map = self.map.reshape(self.mapSizeX*self.mapSizeY)
@@ -91,19 +117,17 @@ def main(argv):
 
     c = app.Canvas(keys='interactive')
     program = gloo.Program(vertex, fragment)
-    program['a_position'] = np.c_[
-        np.linspace(-1.0, +1.0, 1000).astype(np.float32),
-        np.random.uniform(-0.5, +0.5, 1000).astype(np.float32)]
+    program['a_position'] = GlobalMap.gl_mapPositions.astype(np.float32)
     @c.connect
     def on_resize(event):
         gloo.set_viewport(0, 0, *event.size)
     @c.connect
     def on_draw(event):
         gloo.clear((1,1,1,1))
-        program.draw('points')
+        program.draw('lines')
     c.show()
     app.run();
-    print 'oi'
+    print('oi')
 
 if __name__ == "__main__":
    main(sys.argv[1:])
