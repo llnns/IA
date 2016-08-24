@@ -8,16 +8,18 @@ from vispy import gloo
 
 
 class Map:
-    def __init__(self,mapSizeX,mapSizeY,numberObjects,numberAnts):
+    def __init__(self,mapSizeX,mapSizeY,numberObjects,numberAnts,fieldOfView):
         self.mapSizeX = mapSizeX
         self.mapSizeY = mapSizeY
         self.numberObjects = numberObjects
         self.numberAnts = numberAnts
-
+        self.arrayAnts = []
+        self.fieldOfView = fieldOfView
         if(numberObjects>(mapSizeX*mapSizeY)):
             raise ValueError("Numero de Objetos e maior que o numero de celulas do mapa")
 
         self.map = np.zeros((mapSizeX, mapSizeY))
+        self.drawMap = np.zeros((mapSizeX, mapSizeY))
         self.DistributeObjects()
         self.gl_mapPositions = np.zeros((6*mapSizeX*mapSizeY, 2))
         tempx = np.linspace(-0.9, +0.9, mapSizeX+1).astype(np.float32)
@@ -39,12 +41,15 @@ class Map:
                 self.gl_mapPositions[6*mapSizeY*y+6*x+5][0] = tempx[x]+self.gl_Xsize
                 self.gl_mapPositions[6*mapSizeY*y+6*x+5][1] = tempy[y]-self.gl_Ysize
 
+        for i in range(self.numberAnts):
+            self.arrayAnts.append(Ant(self,randint(0,mapSizeX-1),randint(0,mapSizeY-1)))
 
         #print(self.gl_mapPositions)
         #self.gl_mapPositions = np.c_[
         #    np.linspace(-1.0, +1.0, 100).astype(np.float32),
         #    np.linspace(-1.0, +1.0, 100).astype(np.float32)]
         #print(self.gl_mapPositions)
+        self.UpdateAnts()
 
     def DistributeObjects(self):
         self.map = self.map.reshape(self.mapSizeX*self.mapSizeY)
@@ -63,17 +68,67 @@ class Map:
                 print(int(self.map[x][y]), end="")
             print('\n', end=""),
 
+    def UpdateAnts(self):
+        for i in range(self.numberAnts):
+            self.arrayAnts[i].Mov()
+
+    def UpdateDrawMap(self):
+        self.drawMap = np.copy(self.map)
+        for i in range(self.numberAnts):
+            if(self.arrayAnts[i].carring):
+                self.drawMap[self.arrayAnts[i].x][self.arrayAnts[i].y] = 3
+            else:
+                self.drawMap[self.arrayAnts[i].x][self.arrayAnts[i].y] = 2
+
 
 class Ant:
-    def __init__(self,fieldOfView):
-        self.fixieldOfView = fieldOfView
-        self.viewCells = (fieldOfView+2)*(fieldOfView+2)-1
-    def ProbDrop(self, itemsAround):
-        return float(itemsAround)/self.viewCells
-    def ProbCatch(self,itemsAround):
-        return 1-self.ProbDrop(itemsAround)
+    def __init__(self,Map,posX,posY):
+        self.fieldOfView = Map.fieldOfView
+        self.viewCells = (self.fieldOfView+2)*(self.fieldOfView+2)-1
+        self.x = posX
+        self.y = posY
+        self.Map = Map
+        self.carring = False
+        self.itemsAround = 0
 
+    def ProbDrop(self):
+        return float(self.itemsAround)/self.viewCells
 
+    def ProbCatch(self):
+        return 1-self.ProbDrop()
+
+    def Mov(self):
+        probMovX = randint(-1,1)
+        probMovY = randint(-1,1)
+        if((self.x+probMovX)>=0 and (self.x+probMovX)<self.Map.mapSizeX):
+            self.x+=probMovX
+        if((self.y+probMovY)>=0 and (self.y+probMovY)<self.Map.mapSizeY):
+            self.y+=probMovY
+        self.Act()
+
+    def UpdateAround(self):
+        self.itemsAround = 0
+        for i in range(-self.fieldOfView,self.fieldOfView+1):
+            for y in range(-self.fieldOfView,self.fieldOfView+1):
+                if((i==0)and(y==0)):
+                    continue
+                if((self.x+i)>=0 and (self.x+i)<self.Map.mapSizeX and (self.y+y)>=0 and (self.y+y)<self.Map.mapSizeY):
+                    self.itemsAround+=self.Map.map[self.x+i][self.y+y]
+
+    def Act(self):
+        self.UpdateAround()
+        if(self.carring):
+            if(self.Map.map[self.x][self.y]==0):
+                if(uniform(0.0,1.0)<self.ProbDrop()):
+                    self.carring = False
+                    self.Map.map[self.x][self.y]=1
+        else:
+            if(self.Map.map[self.x][self.y]==1):
+                if(self.ProbCatch()<0.25):
+                    print(self.ProbCatch())
+                if(uniform(0.0,1.0)<self.ProbCatch()):
+                    self.carring = True
+                    self.Map.map[self.x][self.y]=0
 
 vertex = """
 attribute vec2 a_position;
@@ -85,6 +140,8 @@ void main (void)
         f_cor=vec4(0.0,0.0,0.0,1.0);
     }else if(a_cor==0.0){
         f_cor=vec4(1.0,1.0,1.0,1.0);
+    }else if(a_cor==3.0){
+        f_cor=vec4(0.0,1.0,0.0,1.0);
     }else{
         f_cor=vec4(1.0,0.0,0.0,1.0);
     }
@@ -105,9 +162,10 @@ def main(argv):
     mapSizeY = 20
     numberObjects = 100
     numberAnts = 10
+    fieldOfView = 1
     helpString = 'help place holder'
     try:
-        opts, args = getopt.getopt(argv,"h",["nAnts=","mapX=","mapY=","nObj="])
+        opts, args = getopt.getopt(argv,"h",["nAnts=","mapX=","mapY=","nObj=","View="])
     except getopt.GetoptError:
         print(helpString)
         sys.exit(2)
@@ -123,12 +181,13 @@ def main(argv):
             mapSizeY = int(arg)
         elif opt in ("--nObj"):
             numberObjects = int(arg)
-    #ini
-    MyAnt = Ant(1)
-
-    GlobalMap = Map(mapSizeX,mapSizeY,numberObjects,numberAnts)
+        elif opt in ("--View"):
+            fieldOfView = int(arg)
+    #INI
+    GlobalMap = Map(mapSizeX,mapSizeY,numberObjects,numberAnts,fieldOfView)
     #GlobalMap.PrintMap()
 
+    #INTERFACE
     c = app.Canvas(keys='interactive')
     c._timer = app.Timer('auto', connect=c.update, start=True)
 
@@ -137,15 +196,18 @@ def main(argv):
     program['a_cor'] = np.repeat(GlobalMap.map,6).astype(np.float32)
     c.program = program
     c.GlobalMap = GlobalMap
+
     @c.connect
     def on_resize(event):
         gloo.set_viewport(0, 0, *event.size)
+
     @c.connect
     def on_draw(event):
         #print(c.GlobalMap.map)
         gloo.clear((1,1,1,1))
-        c.GlobalMap.RandomObjects()
-        c.program['a_cor'] = np.repeat(c.GlobalMap.map,6).astype(np.float32)
+        c.GlobalMap.UpdateAnts()
+        c.GlobalMap.UpdateDrawMap()
+        c.program['a_cor'] = np.repeat(c.GlobalMap.drawMap,6).astype(np.float32)
         program.draw('triangles')
     c.show()
     app.run();
