@@ -103,7 +103,7 @@ def main(argv):
         program.draw('points')
     c.show()
     app.run();
-
+    print 'oi'
 
 if __name__ == "__main__":
    main(sys.argv[1:])
