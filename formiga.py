@@ -3,7 +3,7 @@ from random import *
 import numpy as np
 import sys, getopt
 import vispy
-from vispy import app
+from vispy import app, scene
 from vispy import gloo
 import _thread
 
@@ -29,6 +29,7 @@ class Map:
         tempy = np.linspace(+0.9, -0.9, mapSizeY+1).astype(np.float32)
         self.gl_Xsize = 1.8/mapSizeX
         self.gl_Ysize = 1.8/mapSizeY
+        self.remaingAnts = numberAnts
         for x in range(mapSizeX):
             for y in range(mapSizeY):
                 self.gl_mapPositions[6*mapSizeY*y+6*x][0] = tempx[x]
@@ -75,18 +76,35 @@ class Map:
         for i in range(self.numberAnts):
             self.arrayAnts[i].Mov()
 
-    def ThreadCallUpdate(self):
-        while(self.running and (self.maxIteration==-1 or (self.maxIteration)>0)):
+    def ThreadCallUpdate(self,stop,app):
+        while(self.running):
+            if(self.maxIteration==0):
+                self.KillAnts()
+            else:
+                self.maxIteration-=1
             self.UpdateAnts()
-            self.maxIteration-=1
+            if(stop and self.remaingAnts==0):
+                self.running=False
+                app.quit()
+
+
+
 
     def UpdateDrawMap(self):
         self.drawMap = np.copy(self.map)
         for i in range(self.numberAnts):
+            if(not self.arrayAnts[i].alive):
+                self.remaingAnts-=1
+                continue
             if(self.arrayAnts[i].carring):
                 self.drawMap[self.arrayAnts[i].x][self.arrayAnts[i].y] = 3
             else:
                 self.drawMap[self.arrayAnts[i].x][self.arrayAnts[i].y] = 2
+
+    def KillAnts(self):
+        for i in range(self.numberAnts):
+            if(not self.arrayAnts[i].carring):
+                self.arrayAnts[i].alive = False
 
 
 class Ant:
@@ -98,6 +116,7 @@ class Ant:
         self.Map = Map
         self.carring = False
         self.itemsAround = 0
+        self.alive = True
 
     def ProbDrop(self):
         return float(self.itemsAround)/self.viewCells
@@ -106,6 +125,8 @@ class Ant:
         return 1-self.ProbDrop()
 
     def Mov(self):
+        if(not self.alive):
+            return
         probMovX = int(gauss(0,2))
         probMovY = int(gauss(0,2))
         if((self.x+probMovX)>=0 and (self.x+probMovX)<self.Map.mapSizeX):
@@ -169,7 +190,7 @@ def main(argv):
     numberObjects = 100
     numberAnts = 10
     fieldOfView = 1
-    maxIteration = 100000
+    maxIteration = 2000
     helpString = 'help place holder'
     try:
         opts, args = getopt.getopt(argv,"h",["nAnts=","mapX=","mapY=","nObj=","View=","maIt="])
@@ -218,10 +239,26 @@ def main(argv):
         c.GlobalMap.UpdateDrawMap()
         c.program['a_cor'] = np.repeat(c.GlobalMap.drawMap,6).astype(np.float32)
         program.draw('triangles')
-    _thread.start_new_thread( c.GlobalMap.ThreadCallUpdate, () )
+
+    #Iniciar Simulacao
+    _thread.start_new_thread( c.GlobalMap.ThreadCallUpdate, (True,app) )
+
     c.show()
     app.run();
+
+
+
+    #END
     GlobalMap.running = False
+    #app.stop()
+
+    from vispy.gloo.util import _screenshot
+    from vispy.io import imsave
+    im = _screenshot((0, 0, c.size[0], c.size[1]))
+    imsave('gloo_screenshot.png', im)
+
+    #Save Img
+
     print('Encerrado')
 
 if __name__ == "__main__":
