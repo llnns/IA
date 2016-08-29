@@ -6,7 +6,7 @@ import vispy
 from vispy import app, scene
 from vispy import gloo
 import _thread
-
+from time import gmtime, strftime
 
 class Map:
     def __init__(self,mapSizeX,mapSizeY,numberObjects,numberAnts,fieldOfView,maxIteration):
@@ -185,11 +185,11 @@ void main()
 """
 
 def main(argv):
-    mapSizeX = 20
-    mapSizeY = 20
-    numberObjects = 100
-    numberAnts = 10
-    fieldOfView = 1
+    mapSizeX = 50
+    mapSizeY = 50
+    numberObjects = 800
+    numberAnts = 100
+    fieldOfView = 2
     maxIteration = 2000
     helpString = 'help place holder'
     try:
@@ -255,7 +255,7 @@ def main(argv):
     from vispy.gloo.util import _screenshot
     from vispy.io import imsave
     im = _screenshot((0, 0, c.size[0], c.size[1]))
-    imsave('gloo_screenshot.png', im)
+    imsave(str(mapSizeX)+"x"+str(mapSizeY)+"_"+str(numberObjects)+"_"+str(numberAnts)+"_"+str(fieldOfView)+"_"+str(maxIteration)+"_"+strftime("%Y-%m-%d-%H-%M-%S", gmtime())+".png", im)
 
     #Save Img
 
