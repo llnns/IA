@@ -5,22 +5,25 @@ import sys, getopt
 import vispy
 from vispy import app
 from vispy import gloo
+import _thread
 
 
 class Map:
-    def __init__(self,mapSizeX,mapSizeY,numberObjects,numberAnts,fieldOfView):
+    def __init__(self,mapSizeX,mapSizeY,numberObjects,numberAnts,fieldOfView,maxIteration):
         self.mapSizeX = mapSizeX
         self.mapSizeY = mapSizeY
         self.numberObjects = numberObjects
         self.numberAnts = numberAnts
         self.arrayAnts = []
         self.fieldOfView = fieldOfView
+        self.maxIteration = maxIteration
         if(numberObjects>(mapSizeX*mapSizeY)):
             raise ValueError("Numero de Objetos e maior que o numero de celulas do mapa")
 
         self.map = np.zeros((mapSizeX, mapSizeY))
         self.drawMap = np.zeros((mapSizeX, mapSizeY))
         self.DistributeObjects()
+        self.running = True
         self.gl_mapPositions = np.zeros((6*mapSizeX*mapSizeY, 2))
         tempx = np.linspace(-0.9, +0.9, mapSizeX+1).astype(np.float32)
         tempy = np.linspace(+0.9, -0.9, mapSizeY+1).astype(np.float32)
@@ -72,6 +75,11 @@ class Map:
         for i in range(self.numberAnts):
             self.arrayAnts[i].Mov()
 
+    def ThreadCallUpdate(self):
+        while(self.running and (self.maxIteration==-1 or (self.maxIteration)>0)):
+            self.UpdateAnts()
+            self.maxIteration-=1
+
     def UpdateDrawMap(self):
         self.drawMap = np.copy(self.map)
         for i in range(self.numberAnts):
@@ -98,8 +106,8 @@ class Ant:
         return 1-self.ProbDrop()
 
     def Mov(self):
-        probMovX = randint(-1,1)
-        probMovY = randint(-1,1)
+        probMovX = int(gauss(0,2))
+        probMovY = int(gauss(0,2))
         if((self.x+probMovX)>=0 and (self.x+probMovX)<self.Map.mapSizeX):
             self.x+=probMovX
         if((self.y+probMovY)>=0 and (self.y+probMovY)<self.Map.mapSizeY):
@@ -124,8 +132,6 @@ class Ant:
                     self.Map.map[self.x][self.y]=1
         else:
             if(self.Map.map[self.x][self.y]==1):
-                if(self.ProbCatch()<0.25):
-                    print(self.ProbCatch())
                 if(uniform(0.0,1.0)<self.ProbCatch()):
                     self.carring = True
                     self.Map.map[self.x][self.y]=0
@@ -163,9 +169,10 @@ def main(argv):
     numberObjects = 100
     numberAnts = 10
     fieldOfView = 1
+    maxIteration = 100000
     helpString = 'help place holder'
     try:
-        opts, args = getopt.getopt(argv,"h",["nAnts=","mapX=","mapY=","nObj=","View="])
+        opts, args = getopt.getopt(argv,"h",["nAnts=","mapX=","mapY=","nObj=","View=","maIt="])
     except getopt.GetoptError:
         print(helpString)
         sys.exit(2)
@@ -183,8 +190,10 @@ def main(argv):
             numberObjects = int(arg)
         elif opt in ("--View"):
             fieldOfView = int(arg)
+        elif opt in ("--maIt"):
+            maxIteration = int(arg)
     #INI
-    GlobalMap = Map(mapSizeX,mapSizeY,numberObjects,numberAnts,fieldOfView)
+    GlobalMap = Map(mapSizeX,mapSizeY,numberObjects,numberAnts,fieldOfView,maxIteration)
     #GlobalMap.PrintMap()
 
     #INTERFACE
@@ -205,14 +214,15 @@ def main(argv):
     def on_draw(event):
         #print(c.GlobalMap.map)
         gloo.clear((1,1,1,1))
-        c.GlobalMap.UpdateAnts()
+
         c.GlobalMap.UpdateDrawMap()
         c.program['a_cor'] = np.repeat(c.GlobalMap.drawMap,6).astype(np.float32)
         program.draw('triangles')
+    _thread.start_new_thread( c.GlobalMap.ThreadCallUpdate, () )
     c.show()
     app.run();
-
-    print('oi')
+    GlobalMap.running = False
+    print('Encerrado')
 
 if __name__ == "__main__":
    main(sys.argv[1:])
