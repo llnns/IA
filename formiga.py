@@ -7,6 +7,7 @@ from vispy import app, scene
 from vispy import gloo
 import _thread
 from time import gmtime, strftime
+import time
 
 class Map:
     def __init__(self,mapSizeX,mapSizeY,numberObjects,numberAnts,fieldOfView,maxIteration):
@@ -78,6 +79,7 @@ class Map:
 
     def ThreadCallUpdate(self,stop,app):
         while(self.running):
+            #time.sleep(1)
             if(self.maxIteration==0):
                 self.KillAnts()
             else:
@@ -85,6 +87,7 @@ class Map:
             self.UpdateAnts()
             if(stop and self.remaingAnts==0):
                 self.running=False
+                time.sleep(0.1)
                 app.quit()
 
 
@@ -94,7 +97,6 @@ class Map:
         self.drawMap = np.copy(self.map)
         for i in range(self.numberAnts):
             if(not self.arrayAnts[i].alive):
-                self.remaingAnts-=1
                 continue
             if(self.arrayAnts[i].carring):
                 self.drawMap[self.arrayAnts[i].x][self.arrayAnts[i].y] = 3
@@ -103,8 +105,10 @@ class Map:
 
     def KillAnts(self):
         for i in range(self.numberAnts):
-            if(not self.arrayAnts[i].carring):
+            if(not self.arrayAnts[i].carring and self.arrayAnts[i].alive):
                 self.arrayAnts[i].alive = False
+                self.remaingAnts-=1
+                print(self.remaingAnts)
 
 
 class Ant:
@@ -117,6 +121,9 @@ class Ant:
         self.carring = False
         self.itemsAround = 0
         self.alive = True
+        self.idealX = 0
+        self.idealY = 0
+        self.lastMov = 0
 
     def ProbDrop(self):
         return float(self.itemsAround)/self.viewCells
@@ -124,15 +131,34 @@ class Ant:
     def ProbCatch(self):
         return 1-self.ProbDrop()
 
+    def CalcNewPos(self):
+        probMovX = int(gauss(0,3))
+        probMovY = int(gauss(0,3))
+        if((self.x+probMovX)>=0 and (self.x+probMovX)<self.Map.mapSizeX):
+            self.idealX=probMovX
+        if((self.y+probMovY)>=0 and (self.y+probMovY)<self.Map.mapSizeY):
+            self.idealY=probMovY
+
     def Mov(self):
         if(not self.alive):
             return
-        probMovX = int(gauss(0,2))
-        probMovY = int(gauss(0,2))
-        if((self.x+probMovX)>=0 and (self.x+probMovX)<self.Map.mapSizeX):
-            self.x+=probMovX
-        if((self.y+probMovY)>=0 and (self.y+probMovY)<self.Map.mapSizeY):
-            self.y+=probMovY
+        if(self.idealX==0 and self.idealY==0):
+            self.CalcNewPos()
+        if(abs(self.idealX)>abs(self.idealY)):
+            if(self.idealX>0):
+                self.x+=1
+                self.idealX-=1;
+            else:
+                self.x-=1
+                self.idealX+=1;
+        else:
+            if(self.idealY>0):
+                self.y+=1
+                self.idealY-=1;
+            else:
+                self.y-=1
+                self.idealY+=1;
+
         self.Act()
 
     def UpdateAround(self):
@@ -251,11 +277,15 @@ def main(argv):
     #END
     GlobalMap.running = False
     #app.stop()
+    while(GlobalMap.remaingAnts>0):
+        print("wait")
+
+
 
     from vispy.gloo.util import _screenshot
     from vispy.io import imsave
     im = _screenshot((0, 0, c.size[0], c.size[1]))
-    imsave(str(mapSizeX)+"x"+str(mapSizeY)+"_"+str(numberObjects)+"_"+str(numberAnts)+"_"+str(fieldOfView)+"_"+str(maxIteration)+"_"+strftime("%Y-%m-%d-%H-%M-%S", gmtime())+".png", im)
+    imsave("img/"+str(mapSizeX)+"x"+str(mapSizeY)+"_"+str(numberObjects)+"_"+str(numberAnts)+"_"+str(fieldOfView)+"_"+str(maxIteration)+"_"+strftime("%Y-%m-%d-%H-%M-%S", gmtime())+".png", im)
 
     #Save Img
 
